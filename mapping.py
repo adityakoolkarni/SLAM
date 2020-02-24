@@ -48,6 +48,7 @@ def slam(lidar_data,odometry_data,MAP):
     yaw_noise_pwr =1# 1e-7
     start_time = time.time()
     cur_scan = 0
+    particle_ids = np.arange(num_particles)
     ###### Initial Scan ######
 
     cur_pose = np_lidar_delta_pose[:,cur_scan]
@@ -59,34 +60,36 @@ def slam(lidar_data,odometry_data,MAP):
         #MAP,xs0,ys0 = update_and_map(np_lidar_scan[:,cur_scan],np_lidar_delta_pose[:,cur_scan],MAP,odometry_data['head_angles'][:,cur_scan])
         #### Update the Map based on Lidar Reading #####
         cur_pose = cur_pose + np_lidar_delta_pose[:,cur_scan]
-        for particle in range(num_particles):
+        for particle in particle_ids:
             ######## Predict #########
-            noise = xy_noise_pwr * np.random.normal(0,0.1,2)#Particular noise to x,y
-            noise = np.hstack((noise,yaw_noise_pwr * np.random.normal(0,0.1,1))) #Particular noise to x,y
+            noise = xy_noise_pwr * np.random.normal(0,0.03,2)#Particular noise to x,y
+            noise = np.hstack((noise,yaw_noise_pwr * np.random.normal(0,0.03,1))) #Particular noise to x,y
             part_states[:,particle] = (noise + cur_pose).T
             ######## Update Weights#########
             MAP,part_corr[particle] = update_and_map(np_lidar_scan[:,cur_scan],part_states[:,particle],MAP,odometry_data['head_angles'][:,cur_scan])
-            part_wghts[particle] = part_wghts[particle] * np.exp(part_corr[particle])
+            #part_wghts[particle] = part_wghts[particle] * np.exp(part_corr[particle])
         
         
-        ####### ReSampling ######
-
 
         ####### Update Map with best particle ########
-        best_particle = np.argmax(softmax(part_corr)) ## Do we really need softmax???
-        #best_particle = np.argmax(part_corr)
+        corr_softmax = softmax(part_corr)
+        part_wghts = part_wghts * corr_softmax
         part_wghts /= np.sum(part_wghts)
+        best_particle = np.argmax(corr_softmax) 
 
-        if(cur_scan%5000 ==0):
+#         if(cur_scan == (np_lidar_scan.shape[1]-1)):
+        if(cur_scan % 1000 == 0):
             MAP = update_and_map(np_lidar_scan[:,cur_scan],part_states[:,best_particle],MAP,odometry_data['head_angles'][:,cur_scan],update_log_odds = True,plot_en = 1)
         else:
             MAP = update_and_map(np_lidar_scan[:,cur_scan],part_states[:,best_particle],MAP,odometry_data['head_angles'][:,cur_scan],update_log_odds = True,plot_en = 0)
 
-        #### Predict the next step based on Odometry ########
-        #MAP['robo_xloc'].append(MAP['robo_xloc'][-1] + np_lidar_delta_pose[0,cur_scan] + noise_pwr * np.random.randn(1))
-        #MAP['robo_yloc'].append(MAP['robo_yloc'][-1] + np_lidar_delta_pose[1,cur_scan] + noise_pwr * np.random.randn(1))
-        #if(cur_scan == 0):
-        #    xs_leg,ys_leg = xs0,ys0
+        ####### ReSampling ######
+        N_eff = 1/np.linalg.norm(part_wghts) ** 2
+        if(N_eff < 0.2 * num_particles):
+            part_wghts = np.ones(num_particles) / num_particles
+            particle_ids = np.random.choice(num_particles,num_particles,part_wghts.squeeze)
+            part_states_T = part_states.T
+            part_states = part_states_T[particle_ids].T
 
     print("Time taken",time.time()-start_time)
 
@@ -95,7 +98,7 @@ def slam(lidar_data,odometry_data,MAP):
 
 
         
-
+some_weird_counter = 0
 
 def update_and_map(ranges,pose,MAP,head_angles,update_log_odds=False,plot_en=0):
     #dataIn = io.loadmat("lidar/train_lidar0.mat")
@@ -164,6 +167,8 @@ def update_and_map(ranges,pose,MAP,head_angles,update_log_odds=False,plot_en=0):
           ax2 = fig.add_subplot(122)
           plt.imshow(map_threshold,cmap="hot")
           plt.title("Occupancy map")
+          #image_name = 'image_stamped'+int2str(some_weird_counter)+'.png'
+          #plt.savefig()
           
           #plot correlation
           #ax3 = fig.add_subplot(133,projection='3d')
@@ -286,6 +291,7 @@ def convert2world_frame(lidar_scan,lidar_pose,head_angles):
     #Total pose
     tot_pose = body2world_pose @ head2body_pose @ lid2head_pose
     return tot_pose @ lidar_scan
+
 
 
 
