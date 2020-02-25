@@ -159,6 +159,7 @@ def getRGBCalib():
 if __name__ == "__main__":
     j0 = get_joint("joint/train_joint0")
     print(j0.items())
+    print("Joint Data times",len(j0['ts'][0]))
     l0 = get_lidar("lidar/train_lidar0")
     print(l0[0])
     print("Type of l0",type(l0))
