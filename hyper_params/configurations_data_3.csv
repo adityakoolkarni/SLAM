@@ -1,0 +1,8 @@
+Number of Particles,20
+"Noise x,y and yaw is ",0.0043972,0.0031219,0.00254868
+Resampling Threshold ,0.5
+Lidar confidence ,9
+Log Accumulation Threshold ,100
+Log Map Threshold ,8
+Code run time,1378.9523837566376
+"Map Resolution x,y and resolution",30,30,0.1

@@ -1,3 +1,9 @@
+######################################################################
+#SLAM for Humanoid Robot 
+#Author: Aditya Kulkarni
+#UC San Diego
+######################################################################
+
 from  load_data import get_joint, get_lidar
 from p2_utils import mapCorrelation
 import numpy as np
