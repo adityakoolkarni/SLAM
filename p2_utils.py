@@ -32,7 +32,8 @@ def mapCorrelation(im, x_im, y_im, vp, xs, ys):
             ix = np.int16(np.round((x1-xmin)/xresolution))
             valid = np.logical_and( np.logical_and((iy >=0), (iy < ny)), \
               		                        np.logical_and((ix >=0), (ix < nx)))
-            cpr[jx,jy] = np.sum(im[ix[valid],iy[valid]])
+            #cpr[jx,jy] = np.sum(im[ix[valid],iy[valid]])
+            cpr[jy,jx] = np.sum(im[iy[valid],ix[valid]])
 
     return np.max(cpr)
 

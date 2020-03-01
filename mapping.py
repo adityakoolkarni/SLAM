@@ -14,41 +14,35 @@ import csv
 
 
 ###### Global Configurations #####
-####### This are Good Parameters for Data 0 ############
-#resample_thrs = 0.5
-#lidar_confidence = 9
-#log_thrs = 100
-#num_true_events = 2
-#xy_noise_pwr = 0.003#1e3
-#yaw_noise_pwr = 0.002# 1e-7
-#num_particles = 50
-#plot_freq = 500
-#load_prev_map = False
-
 resample_thrs = 0.5
 lidar_confidence = 9
 log_thrs = 100
-num_true_events = 2
-x_noise_pwr = 0.001757 #1e3
-y_noise_pwr = 0.00199 
-yaw_noise_pwr = 0.00109
+num_true_events = 8
+x_noise_pwr = 2 * 0.001757 #1e3
+y_noise_pwr = 2 * 0.00199 
+yaw_noise_pwr = 2 * 0.00109
 num_particles = 20
 plot_freq = 500
 load_prev_map = False
+map_x = 20
+map_y = 20
+map_res = 0.05
+best_particle = 0
 
 
 def init_map():
     MAP = {}
-    MAP['res']   = 0.05 #meters
-    MAP['xmin']  = -20  #meters
-    MAP['ymin']  = -20
-    MAP['xmax']  =  20
-    MAP['ymax']  =  20 
+    MAP['res']   = map_res #meters
+    MAP['xmin']  = -map_x  #meters
+    MAP['ymin']  = -map_y
+    MAP['xmax']  =  map_x
+    MAP['ymax']  =  map_y 
     MAP['sizex']  = int(np.ceil((MAP['xmax'] - MAP['xmin']) / MAP['res'] + 1)) #cells
     MAP['sizey']  = int(np.ceil((MAP['ymax'] - MAP['ymin']) / MAP['res'] + 1))
     MAP['log_odds'] = np.zeros((MAP['sizex'],MAP['sizey'])) #DATA TYPE: char or int8
     MAP['x_loc'] = []
     MAP['y_loc'] = []
+    MAP['theta'] = []
     if(load_prev_map == True):
         print("Loading Previous Logs")
         MAP['log_odds'] = np.load('images/part_20_threshold_50/map_log_odds.npy')
@@ -80,16 +74,21 @@ def slam(lidar_data,odometry_data,MAP):
     ###### Initial Scan and Log Odds Update ######
 
     cur_pose = np_lidar_delta_pose[:,cur_scan]
-    MAP = update_and_map(np_lidar_scan[:,cur_scan],cur_pose,MAP,odometry_data['head_angles'][:,cur_scan],update_log_odds = True)
+    scan_time = lidar_data[cur_scan]['t'][0][0]
+    poss_odom_values = np.where(odometry_data['ts'][0,:] > scan_time)
+    cur_odom = poss_odom_values[0][0]
+    MAP = update_and_map(np_lidar_scan[:,cur_scan],cur_pose,MAP,odometry_data['head_angles'][:,cur_odom],update_log_odds = True)
 
 
-    #for cur_scan in range(1,np_lidar_scan.shape[1]):
     for cur_scan in tqdm(range(1,np_lidar_scan.shape[1])):
-    #for cur_scan in range(1,np_lidar_scan.shape[1]):
         #### Update the Map based on Lidar Reading #####
         scan_time = lidar_data[cur_scan]['t'][0][0]
         poss_odom_values = np.where(odometry_data['ts'][0,:] > scan_time)
-        cur_odom = poss_odom_values[0][0]
+        try:
+            cur_odom = poss_odom_values[0][0]
+        except:
+            poss_odom_values = np.where(odometry_data['ts'][0,:] < scan_time)
+            cur_odom = poss_odom_values[0][-1]
 
         for particle in particle_ids:
             ######## Predict #########
@@ -103,7 +102,7 @@ def slam(lidar_data,odometry_data,MAP):
         corr_softmax = softmax(part_corr)
         part_wghts = part_wghts * corr_softmax
         part_wghts /= np.sum(part_wghts)
-        #assert np.sum(part_wghts) > 0.99999
+        assert np.sum(part_wghts) > 0.99999
         best_particle = np.argmax(corr_softmax) 
 
 #         if(cur_scan == (np_lidar_scan.shape[1]-1)):
@@ -120,6 +119,7 @@ def slam(lidar_data,odometry_data,MAP):
             part_states_T = part_states.T
             part_states = part_states_T[particle_ids].T
 
+    ######## Logging Data #########
     with open("images/part_20_threshold_50/configurations.csv",'w',newline='') as f:
         writer = csv.writer(f)
         a = ['Number of Particles', str(num_particles)]
@@ -136,10 +136,11 @@ def slam(lidar_data,odometry_data,MAP):
         writer.writerow(a)
         a = ['Code run time', str(time.time()-start_time)]
         writer.writerow(a)
+        a = ['Map Resolution x,y and resolution', str(map_x),str(map_y),str(map_res)]
+        writer.writerow(a)
         np.save('images/part_20_threshold_50/map_log_odds',MAP['log_odds'])
 
 
-    ######## Update #########
 
 
         
@@ -171,25 +172,21 @@ def update_and_map(ranges,pose,MAP,head_angles,update_log_odds=False,plot_en=0,c
     ys0 = world_corrected[1,:].reshape(1,world_corrected.shape[1])
     # convert position in the map frame here 
      
-    #Y = np.concatenate([np.concatenate([xs0,ys0],axis=0),np.zeros(xs0.shape)],axis=0)
     
     # convert from meters to cells
     xis = np.ceil((xs0 - MAP['xmin']) / MAP['res'] ).astype(np.int16)-1
     yis = np.ceil((ys0 - MAP['ymin']) / MAP['res'] ).astype(np.int16)-1
     
-    # build an arbitrary map 
-    #indGood = np.logical_and(np.logical_and(np.logical_and((xis > 1), (yis > 1)), (xis < MAP['sizex'])), (yis < MAP['sizey']))
-    #MAP['map'][xis[0][indGood[0]],yis[0][indGood[0]]]=1
       
     x_im = np.arange(MAP['xmin'],MAP['xmax']+MAP['res'],MAP['res']) #x-positions of each pixel of the map
     y_im = np.arange(MAP['ymin'],MAP['ymax']+MAP['res'],MAP['res']) #y-positions of each pixel of the map
     
-    x_range = np.arange(-0.2,0.2+0.05,0.05)
-    y_range = np.arange(-0.2,0.2+0.05,0.05)
+    ### 9 X 9 Correlation Matrix ###
+    x_range = np.arange(-map_res * 4,map_res * 4 + map_res,map_res)
+    y_range = np.arange(-map_res * 4,map_res * 4 + map_res,map_res)
     
     map_shape = MAP['log_odds'].shape
 
-      #################################################
     
     ######## Update Log-Odds #########
     pix_thrs = -num_true_events * np.log(lidar_confidence) ### Use this pixel only it was detected as free more than two times
@@ -197,7 +194,6 @@ def update_and_map(ranges,pose,MAP,head_angles,update_log_odds=False,plot_en=0,c
         free_cells = np.zeros(map_shape)
         occupied_cells = np.zeros(map_shape)
         ################## Bug of the year was found here ##############
-        #pose = pose.astype(np.int16)
         pose_x = np.ceil((pose[0] - MAP['xmin']) / MAP['res'] ).astype(np.int16)-1
         pose_y = np.ceil((pose[1] - MAP['ymin']) / MAP['res'] ).astype(np.int16)-1
 
@@ -206,11 +202,10 @@ def update_and_map(ranges,pose,MAP,head_angles,update_log_odds=False,plot_en=0,c
             if(yis[0,scan] >  MAP['sizey'] or xis[0,scan] >  MAP['sizex']) :
                 pass
             else:
+            
               free_cells = cv2.line(free_cells,(pose_x,pose_y),(xis[0,scan],yis[0,scan]),color = 1,thickness=1)
               occupied_cells[yis[0,scan],xis[0,scan]] = 1
-              #free_cells = cv2.line(free_cells,(pose_y,pose_x),(yis[0,scan],xis[0,scan]),color = 255,thickness=1)
-              #occupied_cells[xis[0,scan],yis[0,scan]] = 1
-        #occupied_cells[pose_y,pose_x] = 1
+
       
         sensor_confidence = np.full(map_shape,np.log(lidar_confidence))
         MAP["log_odds"] += 2 * occupied_cells * sensor_confidence #Because we are subtracting one value at occupied free cell
@@ -219,21 +214,18 @@ def update_and_map(ranges,pose,MAP,head_angles,update_log_odds=False,plot_en=0,c
         MAP["log_odds"] = np.where(MAP["log_odds"] < -log_thrs, np.full(map_shape,-log_thrs),MAP["log_odds"])
         MAP['x_loc'].append(pose_x)
         MAP['y_loc'].append(pose_y)
+        MAP['theta'].append(pose[2])
 
     ################# Plot ################
+    plot_en_ = False
     if(plot_en):
           fig = plt.figure(figsize=(18,10))
-          #map_threshold = np.where(MAP['log_odds'] < 0,  np.full(map_shape,1),np.zeros(map_shape)) #### TODO
           map_threshold = np.zeros((map_shape[0],map_shape[1],3))
           map_threshold[:,:,0] = np.where(MAP['log_odds'] <= pix_thrs,  np.full(map_shape,1),np.zeros(map_shape))
           map_threshold[:,:,1] = np.where(MAP['log_odds'] <= pix_thrs,  np.full(map_shape,1),np.zeros(map_shape)) 
           map_threshold[:,:,2] = np.where(MAP['log_odds'] <= pix_thrs,  np.full(map_shape,1),np.zeros(map_shape)) 
           plt.scatter(MAP['x_loc'],MAP['y_loc'],s=0.1,c='r')
           plt.scatter(pose_x,pose_y,s=1,c='b')
-          #pix_r = np.array([1,0,0]).reshape(1,1,3)
-          #map_threshold[pose_y,pose_x,:] = pix_r   
-          #pix_b = np.array([0,0,1]).reshape(1,1,3)
-          #map_threshold[MAP['y_loc'],MAP['x_loc'],:] = pix_b   
 
           img_name = '/datasets/home/94/594/adkulkar/sensing/SLAM/images/part_20_threshold_50/' + 'img_' + str(cur_scan) + '.png'
           title_name = "Occupancy Map" + "Scan Number : " + str(cur_scan)
@@ -241,21 +233,17 @@ def update_and_map(ranges,pose,MAP,head_angles,update_log_odds=False,plot_en=0,c
           plt.xlabel("x")
           plt.ylabel("y")
           plt.imshow(map_threshold)
-          #plt.imsave(img_name,map_threshold)
           plt.savefig(img_name)
           plt.show()
-
-
-
+          
     if(update_log_odds == True):
         return MAP
     
-    #TODO: Cap log odds, Threshold Map also
     ####### Perform Correlation #######
     
     Y = np.vstack((xs0,ys0))
       
-    map_threshold = np.where(MAP['log_odds'] > -pix_thrs, np.ones(map_shape),np.zeros(map_shape))
+    map_threshold = np.where(MAP['log_odds'] >= -pix_thrs, np.ones(map_shape),np.zeros(map_shape))
     correlation = mapCorrelation(map_threshold,x_im,y_im,Y,x_range,x_range)
     
     return MAP,correlation
@@ -293,9 +281,14 @@ def convert2world_frame(lidar_scan,lidar_pose,head_angles):
     body2world_pose = np.vstack((body2world_pose,np.array([0,0,0,1]).reshape(1,4)))
       
 
-    #Total pose
-    tot_pose = body2world_pose @ head2body_pose @ lid2head_pose
-    return tot_pose @ lidar_scan
+    body_pose = head2body_pose @ lid2head_pose @ lidar_scan
+    
+    ###### Filtering Out Ground Points ######
+    body_pose_T = body_pose.T
+    body_pose_corrected = body_pose_T[np.where(body_pose[2,:] > 0)]
+    body_pose_corrected = body_pose_corrected.T
+    
+    return body2world_pose @ body_pose_corrected 
 
 
 
