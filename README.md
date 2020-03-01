@@ -8,3 +8,8 @@ All the code is present in the mapping.py file. There are multiple functions ins
 3) update_and_map : This function computes the predicted map correlation with actual map. It also does the transformation from LIDAR frame to the world frame along with the corrections like removal of ground detection. This functon also visualizes the MAP and particle location
 4) convert2world : Does all the required transformation from LIDAR frame to world frame.
 5) mapCorrelation : Is a function that computes correlation between maps in a local region
+
+To run the code on terminal: python mapping.py 
+All the hyperparameters required can be set in the mapping.py file. Example of used hyperparameters are shared in the hyper-parameters.
+
+Requirements: Numpy, Matplotlib, sklearn, OpenCV
