@@ -1,7 +1,9 @@
 # SLAM
-The code to perform SLAM based on particle filter and Occupancy map estimation
+The code to perform SLAM based on particle filter and Occupancy map estimation. 
 
-All the code is present in the mapping.py file. There are multiple functions inside which perform appropriate actions to over all acheive SLAM. 
+![](Images/d0_images_only/img_12047.png)
+
+In the image above red path shows the path taken by the robot and white space is the area sweeped by the robot. All the code is present in the mapping.py file. There are multiple functions inside which perform appropriate actions to over all acheive SLAM. 
 
 1) init_map : This creates a MAP based on settings provided. Here one can choose the resolution, x and y size of the MAP. 
 2) slam : This is the heart of the code and acts like an orchestrator in calling other functions and acheiving SLAM. This performs prediction step, update step and resampling, and logging of the important data required. 
